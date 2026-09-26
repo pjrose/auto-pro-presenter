@@ -268,6 +268,24 @@ def make_sermon(manifest: dict, prototype: Presentation, source_cue, source_acti
         else:
             raise ValueError(f"Unknown sermon slide type: {entry['type']}")
         doc.cues.add().CopyFrom(make_cue(source_cue, source_action, slide))
+    # ProPresenter builds its presentation viewer from cue groups. Ungrouped
+    # cues parse successfully but leave the presentation area empty in the UI.
+    arrangement = doc.arrangements.add()
+    arrangement.uuid.string = uid()
+    arrangement.name = "Normal"
+    for index, cue in enumerate(doc.cues):
+        group = doc.cue_groups.add()
+        group.group.uuid.string = uid()
+        if index == 0:
+            group.group.name = "Title"
+        else:
+            kind = manifest["sermon_slides"][index - 1]["type"]
+            group.group.name = "Point" if kind == "point" else "Scripture"
+        group.cue_identifiers.add().string = cue.uuid.string
+        arrangement.group_identifiers.add().string = group.group.uuid.string
+    doc.selected_arrangement.string = arrangement.uuid.string
+    if len(doc.cue_groups) != len(doc.cues):
+        raise ValueError("Every sermon cue must belong to a cue group")
     return doc
 
 
