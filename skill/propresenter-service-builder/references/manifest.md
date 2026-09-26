@@ -21,6 +21,18 @@ Songs appear in playlist order. For an existing song:
 
 The `fixes` array is optional. A fix changes only that RTF text fragment and fails if its count differs. Use the exact library presentation name, including capitalization, for `name`.
 
+For an optional looping background on any song, add:
+
+```json
+"background_video": {
+  "source": "C:\\path\\verified-1920x1080.mp4",
+  "duration": 15.02,
+  "frame_rate": 60
+}
+```
+
+The builder copies the MP4 into the show's `Media/Downloads/Fall Landscapes 2026` folder and attaches it to the first cue with loop playback. `duration` is seconds; use the actual file values, not the stock-site listing. Keep source URL and license details in a separate download record for attribution and audit.
+
 For a new song:
 
 ```json

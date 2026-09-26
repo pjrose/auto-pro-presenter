@@ -178,6 +178,39 @@ def patch_existing(doc: Presentation, fixes: list[dict]) -> int:
     return changed
 
 
+def set_background_video(doc: Presentation, media_action, video_path: Path,
+                         show: Path, duration: float, frame_rate: float) -> None:
+    """Attach a looping Full HD video to the first (blank) background cue."""
+    if not doc.cues:
+        raise ValueError(f"No cues in {doc.name}")
+    cue = doc.cues[0]
+    if not any(a.HasField("slide") for a in cue.actions):
+        raise ValueError(f"First cue has no slide in {doc.name}")
+    for index in reversed(range(len(cue.actions))):
+        if cue.actions[index].HasField("media"):
+            del cue.actions[index]
+    action = cue.actions.add()
+    action.CopyFrom(media_action)
+    action.uuid.string = uid()
+    action.name = video_path.stem
+    action.ClearField("label")
+    media = action.media.element
+    media.uuid.string = uid()
+    media.metadata.ClearField("manufacture_name")
+    media.metadata.format = "h264"
+    for url in (media.url, media.video.file.local_url):
+        url.absolute_string = str(video_path)
+        url.local.path = video_path.relative_to(show).as_posix()
+    media.video.file.ClearField("remote_properties")
+    transport = media.video.transport
+    transport.out_point = duration
+    transport.end_point = duration
+    media.video.video.frame_rate = frame_rate
+    media.video.drawing.natural_size.width = 1920
+    media.video.drawing.natural_size.height = 1080
+    doc.last_modified_date.seconds = int(datetime.now(timezone.utc).timestamp())
+
+
 def simple_slide(theme_slide, text_by_name: dict[str, str], size_by_name: dict[str, int]):
     slide = fresh_slide(theme_slide.base_slide)
     slide.draws_background_color = True
@@ -326,6 +359,7 @@ def main() -> None:
     lyric_theme = Template.Document.FromString((show / "Themes/Lyrics Centered/Theme").read_bytes())
     top_third = next(s.base_slide for s in lyric_theme.slides if s.name == "Top Third - White")
     black_theme = Template.Document.FromString((show / "Themes/Black/Theme").read_bytes())
+    media_action = next(a for c in prototype.cues for a in c.actions if a.HasField("media"))
 
     staged: dict[Path, bytes] = {}
     song_entries = []
@@ -344,6 +378,17 @@ def main() -> None:
                 raise FileNotFoundError(f"No existing presentation or PPTX for {name}")
             doc = make_lyrics(song, show, prototype, source_cue, source_action, top_third)
             staged[path.relative_to(show)] = doc.SerializeToString()
+        if song.get("background_video"):
+            video = song["background_video"]
+            source_video = Path(video["source"])
+            if not source_video.is_file():
+                raise FileNotFoundError(source_video)
+            rel_video = Path("Media/Downloads/Fall Landscapes 2026") / source_video.name
+            dest_video = show / rel_video
+            staged[rel_video] = source_video.read_bytes()
+            set_background_video(doc, media_action, dest_video, show,
+                                 float(video["duration"]), float(video["frame_rate"]))
+            staged[path.relative_to(show)] = doc.SerializeToString()
         song_entries.append((name, path, doc))
 
     sermon_path = show / "Libraries" / "Central en Espanol" / f"{manifest['sermon_name']}.pro"
@@ -359,8 +404,13 @@ def main() -> None:
         target = stage / rel
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(payload)
-        parsed = PlaylistDocument.FromString(payload) if rel == Path("Playlists/Library") else Presentation.FromString(payload)
-        if parsed.SerializeToString() != payload:
+        if rel == Path("Playlists/Library"):
+            parsed = PlaylistDocument.FromString(payload)
+        elif rel.suffix == ".pro":
+            parsed = Presentation.FromString(payload)
+        else:
+            parsed = None
+        if parsed is not None and parsed.SerializeToString() != payload:
             raise ValueError(f"Round-trip validation failed: {rel}")
     print(f"Staged {len(staged)} files at {stage}")
     print(f"Playlist {date}: {[x[0] for x in song_entries] + [manifest['sermon_name']]}")

@@ -1,6 +1,6 @@
 # ProPresenter service builder
 
-This local tool creates editable lyric presentations, a simple sermon presentation, and a dated playlist from a reviewed JSON manifest. It targets ProPresenter 18's Protocol Buffer files. Existing songs are reused; specified text fixes are applied in place without rebuilding their arrangements.
+This local tool creates editable lyric presentations, a simple sermon presentation, a dated playlist, and optional looping motion backgrounds from a reviewed JSON manifest. It targets ProPresenter 18's Protocol Buffer files. Existing songs are reused; specified text fixes are applied in place without rebuilding their arrangements.
 
 ## Setup
 
