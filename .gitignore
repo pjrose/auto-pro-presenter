@@ -3,3 +3,4 @@ __pycache__/
 .venv/
 stage/
 backup-*/
+.build-example/

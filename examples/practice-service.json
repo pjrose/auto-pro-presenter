@@ -1,0 +1,16 @@
+{
+  "playlist_date": "2099-01-01",
+  "songs": [
+    {
+      "name": "Luz en el camino (Practice)",
+      "source_pptx": "examples/practice-song.pptx",
+      "key": "C",
+      "sections": [
+        {"name": "Verse 1", "slides": [1]},
+        {"name": "Chorus", "slides": [2]},
+        {"name": "Verse 2", "slides": [3]},
+        {"name": "Chorus", "slides": [4]}
+      ]
+    }
+  ]
+}

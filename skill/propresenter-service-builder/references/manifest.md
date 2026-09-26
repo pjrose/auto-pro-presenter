@@ -1,13 +1,13 @@
 # Manifest format
 
-The manifest is UTF-8 JSON with these top-level keys:
+The manifest is UTF-8 JSON. A lyric-only service needs `playlist_date` and `songs`; sermon keys are optional:
 
 ```json
 {
   "playlist_date": "YYYY-MM-DD",
+  "songs": [],
   "sermon_name": "YYYY-MM-DD",
   "sermon_title": ["Title", "Subtitle", "Bible reference"],
-  "songs": [],
   "sermon_slides": []
 }
 ```
@@ -31,7 +31,7 @@ For an optional looping background on any song, add:
 }
 ```
 
-The builder copies the MP4 into the show's `Media/Downloads/Fall Landscapes 2026` folder and attaches it to the first cue with loop playback. `duration` is seconds; use the actual file values, not the stock-site listing. Keep source URL and license details in a separate download record for attribution and audit.
+The builder copies the MP4 into the show's `Media/Downloads/Service Backgrounds` folder and attaches it to the first cue with loop playback. `duration` is seconds; use the actual file values, not the stock-site listing. Keep source URL and license details in a separate download record for attribution and audit.
 
 For a new song:
 
@@ -42,7 +42,7 @@ For a new song:
  "corrections": {"2": "Corrected line 1\nCorrected line 2"}}
 ```
 
-Slide numbers are one-based PPTX positions. Every nonempty PPTX slide must appear in one section exactly once. Empty PPTX divider slides are skipped automatically. `corrections` replaces the full text of a chosen slide. Each new song gets a blank Background cue before the listed sections.
+Slide numbers are one-based PPTX positions. Every nonempty PPTX slide must appear in one section exactly once. Empty PPTX divider slides are skipped automatically. `corrections` replaces the full text of a chosen slide. Each new song gets a blank Background cue before the listed sections. The cue groups form ProPresenter's Master. If a section with the same name and text appears twice in the PPTX, the builder creates one Master group and repeats it in the Normal arrangement. See `examples/practice-service.json`.
 
 Sermon slides appear in order after the title slide:
 
@@ -51,4 +51,4 @@ Sermon slides appear in order after the title slide:
 {"type": "verse", "reference": "Hechos 20:17", "text": "17 Verse text"}
 ```
 
-The builder places each verse on its own slide with the reference and `(RVR1960)` label. If a different translation is requested, update that label in the builder before use. Verse text must be checked against the translation rather than trusted from a rough PDF extraction.
+The builder places each verse on its own slide with the reference and `(RVR1960)` label. If a different translation is requested, update that label in the builder before use. Verse text must be checked against the translation rather than trusted from a rough PDF extraction. Leave the sermon keys out entirely if Bible access is unavailable; the song playlist can still be built. If a verse has no text, the builder skips the sermon, explains why, and still stages the lyric playlist.

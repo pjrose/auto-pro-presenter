@@ -1,0 +1,11 @@
+*.md text eol=lf
+*.py text eol=lf
+*.json text eol=lf
+*.txt text eol=lf
+*.pdf binary
+*.pptx binary
+*.pro binary
+*.png binary
+*.jpg binary
+themes/**/Theme binary
+templates/empty-playlist binary

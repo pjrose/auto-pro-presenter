@@ -129,10 +129,10 @@ def make_lyrics(song: dict, show: Path, prototype: Presentation,
 
     corrections = {int(k): v for k, v in song.get("corrections", {}).items()}
     used = set()
+    section_groups: dict[tuple[str, tuple[str, ...]], str] = {}
+    normal_order = [bg_group.group.uuid.string]
     for section in song["sections"]:
-        group = doc.cue_groups.add()
-        group.group.uuid.string = uid()
-        group.group.name = section["name"]
+        section_lines = []
         for number in section["slides"]:
             if number < 1 or number > len(slides) or number in used:
                 raise ValueError(f"Invalid or repeated PPTX slide {number} in {song['name']}")
@@ -140,6 +140,17 @@ def make_lyrics(song: dict, show: Path, prototype: Presentation,
             lyric = corrections.get(number, slides[number - 1])
             if not lyric:
                 raise ValueError(f"Empty lyric slide {number} in {song['name']}")
+            section_lines.append(lyric)
+        identity = (section["name"], tuple(section_lines))
+        if identity in section_groups:
+            normal_order.append(section_groups[identity])
+            continue
+        group = doc.cue_groups.add()
+        group.group.uuid.string = uid()
+        group.group.name = section["name"]
+        section_groups[identity] = group.group.uuid.string
+        normal_order.append(group.group.uuid.string)
+        for lyric in section_lines:
             slide = fresh_slide(lyric_template)
             text_elements = [e for e in slide.elements if e.element.HasField("text")]
             if len(text_elements) != 1:
@@ -155,8 +166,8 @@ def make_lyrics(song: dict, show: Path, prototype: Presentation,
     arrangement = doc.arrangements.add()
     arrangement.uuid.string = uid()
     arrangement.name = "Normal"
-    for group in doc.cue_groups:
-        arrangement.group_identifiers.add().string = group.group.uuid.string
+    for group_id in normal_order:
+        arrangement.group_identifiers.add().string = group_id
     doc.selected_arrangement.string = arrangement.uuid.string
     return doc
 
@@ -323,15 +334,19 @@ def playlist_item(node, name: str, path: Path, show: Path, presentation: Present
 
 
 def make_playlist(show: Path, date: str, songs: list[tuple[str, Path, Presentation]],
-                  sermon: tuple[str, Path, Presentation]) -> PlaylistDocument:
-    source = PlaylistDocument.FromString((show / "Playlists/Library").read_bytes())
+                  sermon: tuple[str, Path, Presentation] | None) -> PlaylistDocument:
+    playlist_path = show / "Playlists/Library"
+    if playlist_path.exists():
+        source = PlaylistDocument.FromString(playlist_path.read_bytes())
+    else:
+        source = PlaylistDocument.FromString((Path(__file__).parent / "templates/empty-playlist").read_bytes())
     if any(p.name == date for p in source.root_node.playlists.playlists):
         raise ValueError(f"Playlist {date} already exists")
     node = source.root_node.playlists.playlists.add()
     node.uuid.string = uid()
     node.name = date
     node.items.SetInParent()
-    for name, path, doc in [*songs, sermon]:
+    for name, path, doc in [*songs, *([sermon] if sermon else [])]:
         playlist_item(node, name, path, show, doc)
     return source
 
@@ -347,6 +362,8 @@ def app_is_running() -> bool:
 def apply_staged(stage: Path, show: Path, backup: Path, relative_paths: list[Path]) -> None:
     if app_is_running():
         raise RuntimeError("Close ProPresenter before applying staged files")
+    if not show.is_dir() or not any(show.iterdir()):
+        raise FileNotFoundError("ProPresenter show folder is missing or empty. Start ProPresenter once and confirm --show-root before applying.")
     backup.mkdir(parents=True, exist_ok=False)
     for rel in relative_paths:
         src = show / rel
@@ -356,6 +373,8 @@ def apply_staged(stage: Path, show: Path, backup: Path, relative_paths: list[Pat
             shutil.copy2(src, dst)
     applied = []
     try:
+        for library_name in ("Lyrics", "Central en Espanol"):
+            (show / "Libraries" / library_name).mkdir(parents=True, exist_ok=True)
         for rel in relative_paths:
             dst = show / rel
             dst.parent.mkdir(parents=True, exist_ok=True)
@@ -384,7 +403,10 @@ def main() -> None:
     stage = args.stage.resolve()
     manifest = json.loads(args.manifest.read_text(encoding="utf-8"))
     date = manifest["playlist_date"]
-    prototype_path = next((show / "Libraries/Lyrics").glob("*.pro"))
+    existing_prototypes = list((show / "Libraries/Lyrics").glob("*.pro"))
+    prototype_path = existing_prototypes[0] if existing_prototypes else Path(__file__).parent / "templates/starter.pro"
+    if not prototype_path.exists():
+        raise FileNotFoundError("No Lyrics presentation found. Open ProPresenter once to create a show, then add a simple slide presentation in Lyrics.")
     prototype = Presentation.FromString(prototype_path.read_bytes())
     source_cue = next(c for c in prototype.cues if any(a.HasField("slide") and a.slide.HasField("presentation") for a in c.actions))
     source_action = next(a for a in source_cue.actions if a.HasField("slide") and a.slide.HasField("presentation"))
@@ -399,7 +421,7 @@ def main() -> None:
     black_theme = load_theme("Black")
     plain_theme = load_theme("Plain Text")
     bible_slide = next(s for s in plain_theme.slides if s.name == "Central Bible Format")
-    media_action = next(a for c in prototype.cues for a in c.actions if a.HasField("media"))
+    media_action = next((a for c in prototype.cues for a in c.actions if a.HasField("media")), None)
 
     staged: dict[Path, bytes] = {}
     song_entries = []
@@ -419,11 +441,13 @@ def main() -> None:
             doc = make_lyrics(song, show, prototype, source_cue, source_action, top_third)
             staged[path.relative_to(show)] = doc.SerializeToString()
         if song.get("background_video"):
+            if media_action is None:
+                raise ValueError("This show has no video cue to use as a model. Add one video background to a Lyrics presentation in ProPresenter, then try again. Lyrics without video can be built now.")
             video = song["background_video"]
             source_video = Path(video["source"])
             if not source_video.is_file():
                 raise FileNotFoundError(source_video)
-            rel_video = Path("Media/Downloads/Fall Landscapes 2026") / source_video.name
+            rel_video = Path("Media/Downloads/Service Backgrounds") / source_video.name
             dest_video = show / rel_video
             staged[rel_video] = source_video.read_bytes()
             set_background_video(doc, media_action, dest_video, show,
@@ -431,13 +455,27 @@ def main() -> None:
             staged[path.relative_to(show)] = doc.SerializeToString()
         song_entries.append((name, path, doc))
 
-    sermon_path = show / "Libraries" / "Central en Espanol" / f"{manifest['sermon_name']}.pro"
-    if sermon_path.exists():
-        raise ValueError(f"Sermon presentation already exists: {sermon_path}")
-    sermon = make_sermon(manifest, prototype, source_cue, source_action, black_theme, bible_slide)
-    staged[sermon_path.relative_to(show)] = sermon.SerializeToString()
-    playlist = make_playlist(show, date, song_entries, (manifest["sermon_name"], sermon_path, sermon))
+    sermon = None
+    sermon_entry = None
+    if manifest.get("sermon_slides"):
+        missing = [s.get("reference", "(unnamed)") for s in manifest["sermon_slides"]
+                   if s.get("type") == "verse" and not s.get("text", "").strip()]
+        if missing:
+            print("Sermon skipped: Bible text missing for " + ", ".join(missing)
+                  + ". Check Reina-Valera 1960 access in ProPresenter or ask for approved verse text. The lyric playlist will still be prepared.")
+        else:
+            sermon_path = show / "Libraries" / "Central en Espanol" / f"{manifest['sermon_name']}.pro"
+            if sermon_path.exists():
+                raise ValueError(f"Sermon presentation already exists: {sermon_path}")
+            sermon = make_sermon(manifest, prototype, source_cue, source_action, black_theme, bible_slide)
+            staged[sermon_path.relative_to(show)] = sermon.SerializeToString()
+            sermon_entry = (manifest["sermon_name"], sermon_path, sermon)
+    playlist = make_playlist(show, date, song_entries, sermon_entry)
     staged[Path("Playlists/Library")] = playlist.SerializeToString()
+    for theme_name in ("Black", "Lyrics Centered", "Plain Text"):
+        rel = Path("Themes") / theme_name / "Theme"
+        if not (show / rel).exists():
+            staged[rel] = (Path(__file__).parent / "themes" / theme_name / "Theme").read_bytes()
 
     stage.mkdir(parents=True, exist_ok=True)
     for rel, payload in staged.items():
@@ -453,8 +491,9 @@ def main() -> None:
         if parsed is not None and parsed.SerializeToString() != payload:
             raise ValueError(f"Round-trip validation failed: {rel}")
     print(f"Staged {len(staged)} files at {stage}")
-    print(f"Playlist {date}: {[x[0] for x in song_entries] + [manifest['sermon_name']]}")
-    print(f"Sermon slides: {len(sermon.cues)}")
+    print(f"Playlist {date}: {[x[0] for x in song_entries] + ([sermon_entry[0]] if sermon_entry else [])}")
+    if sermon:
+        print(f"Sermon slides: {len(sermon.cues)}")
     if args.apply:
         backup = stage / ("backup-" + datetime.now().strftime("%Y%m%d-%H%M%S"))
         apply_staged(stage, show, backup, list(staged))
@@ -462,4 +501,8 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except (ValueError, FileNotFoundError, RuntimeError) as exc:
+        print(f"Could not prepare service: {exc}", file=sys.stderr)
+        sys.exit(2)
