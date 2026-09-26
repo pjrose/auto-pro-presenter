@@ -65,6 +65,16 @@ def set_element_text(element, text: str, size: int, bold: bool = True) -> None:
     element.element.text.scale_behavior = 2  # scale down to fit
 
 
+def set_template_text(element, text: str) -> None:
+    """Replace placeholder text while retaining a theme element's RTF style."""
+    data = element.element.text.rtf_data
+    prefix, marker, _ = data.rpartition(b"\\cb2 ")
+    if not marker or not data.endswith(b"}"):
+        raise ValueError(f"Unrecognized themed RTF in {element.element.name}")
+    element.element.text.rtf_data = prefix + marker + rtf_escape(text) + b"}"
+    element.element.text.scale_behavior = 2
+
+
 def fresh_slide(template_slide):
     slide = copy.deepcopy(template_slide)
     slide.uuid.string = uid()
@@ -238,7 +248,7 @@ def place_text(slide, name: str, x: int, y: int, width: int, height: int) -> Non
 
 
 def make_sermon(manifest: dict, prototype: Presentation, source_cue, source_action,
-                black_theme: Template.Document) -> Presentation:
+                black_theme: Template.Document, bible_theme_slide) -> Presentation:
     themes = {slide.name: slide for slide in black_theme.slides}
     doc = Presentation()
     doc.application_info.CopyFrom(prototype.application_info)
@@ -259,12 +269,17 @@ def make_sermon(manifest: dict, prototype: Presentation, source_cue, source_acti
         elif entry["type"] == "verse":
             ref = entry["reference"]
             verse = entry["text"]
-            size = 52 if len(verse) < 180 else 43
-            slide = simple_slide(themes["Scripture"],
-                                 {"Verse": verse, "Reference": ref + " (RVR1960)"},
-                                 {"Verse": size, "Reference": 37})
-            place_text(slide, "Verse", 150, 120, 1620, 760)
-            place_text(slide, "Reference", 150, 925, 1620, 95)
+            slide = fresh_slide(bible_theme_slide.base_slide)
+            slide.draws_background_color = True
+            slide.background_color.red = 0
+            slide.background_color.green = 0
+            slide.background_color.blue = 0
+            slide.background_color.alpha = 1
+            text_elements = {e.element.name: e for e in slide.elements if e.element.HasField("text")}
+            if set(text_elements) != {"Verse", "Reference"}:
+                raise ValueError("Central Bible Format needs Verse and Reference elements")
+            set_template_text(text_elements["Verse"], verse)
+            set_template_text(text_elements["Reference"], ref + " (RVR1960)")
         else:
             raise ValueError(f"Unknown sermon slide type: {entry['type']}")
         doc.cues.add().CopyFrom(make_cue(source_cue, source_action, slide))
@@ -374,9 +389,16 @@ def main() -> None:
     source_cue = next(c for c in prototype.cues if any(a.HasField("slide") and a.slide.HasField("presentation") for a in c.actions))
     source_action = next(a for a in source_cue.actions if a.HasField("slide") and a.slide.HasField("presentation"))
 
-    lyric_theme = Template.Document.FromString((show / "Themes/Lyrics Centered/Theme").read_bytes())
+    def load_theme(name: str) -> Template.Document:
+        bundled = Path(__file__).parent / "themes" / name / "Theme"
+        source = bundled if bundled.exists() else show / "Themes" / name / "Theme"
+        return Template.Document.FromString(source.read_bytes())
+
+    lyric_theme = load_theme("Lyrics Centered")
     top_third = next(s.base_slide for s in lyric_theme.slides if s.name == "Top Third - White")
-    black_theme = Template.Document.FromString((show / "Themes/Black/Theme").read_bytes())
+    black_theme = load_theme("Black")
+    plain_theme = load_theme("Plain Text")
+    bible_slide = next(s for s in plain_theme.slides if s.name == "Central Bible Format")
     media_action = next(a for c in prototype.cues for a in c.actions if a.HasField("media"))
 
     staged: dict[Path, bytes] = {}
@@ -412,7 +434,7 @@ def main() -> None:
     sermon_path = show / "Libraries" / "Central en Espanol" / f"{manifest['sermon_name']}.pro"
     if sermon_path.exists():
         raise ValueError(f"Sermon presentation already exists: {sermon_path}")
-    sermon = make_sermon(manifest, prototype, source_cue, source_action, black_theme)
+    sermon = make_sermon(manifest, prototype, source_cue, source_action, black_theme, bible_slide)
     staged[sermon_path.relative_to(show)] = sermon.SerializeToString()
     playlist = make_playlist(show, date, song_entries, (manifest["sermon_name"], sermon_path, sermon))
     staged[Path("Playlists/Library")] = playlist.SerializeToString()

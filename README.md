@@ -11,6 +11,14 @@ py -m venv .venv
 
 The `vendor` directory contains generated Python bindings for the [unofficial ProPresenter file schema](https://github.com/greyshirtguy/ProPresenter7-Proto), whose MIT license is included. ProPresenter does not publish this file format as a stable interface, so inspect the staged result after app updates.
 
+`themes/` contains the three theme files used by the builder: `Black`, `Lyrics Centered`, and `Plain Text`. The Bible layout within `Plain Text` is named `Central Bible Format`. The builder reads these bundled files, so the source computer does not need the themes installed. To make the layouts available in ProPresenter's Theme browser on another computer, close ProPresenter and run:
+
+```powershell
+.venv\Scripts\python.exe install_themes.py --show-root 'C:\Users\USER\Documents\ProPresenter'
+```
+
+Existing themes are skipped by default. Add `--replace-existing` to back them up and replace them. The themes use system fonts, including Helvetica Light; ProPresenter may substitute a font if it is unavailable on the destination computer.
+
 ## Run
 
 ```powershell
