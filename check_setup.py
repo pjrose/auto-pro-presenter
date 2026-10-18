@@ -3,12 +3,20 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
+import sys
+
+from network_check import NetworkAccessError, require_network
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--show-root", type=Path, required=True)
+    parser.add_argument("--show-root", type=Path, help="Optional show folder to inspect after the API check")
+    parser.add_argument("--api-url", help="ProPresenter API URL; defaults to environment or Windows preferences")
     args = parser.parse_args()
+    api = require_network(args.api_url)
+    print(f"API ready: {api['version']} at {api['url']}")
+    if args.show_root is None:
+        return
     show = args.show_root.expanduser().resolve()
     print(f"ProPresenter show folder: {show}")
     if not show.is_dir():
@@ -32,4 +40,8 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except NetworkAccessError as exc:
+        print(f"Setup stopped: {exc}", file=sys.stderr)
+        sys.exit(2)

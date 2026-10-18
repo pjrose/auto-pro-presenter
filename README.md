@@ -8,6 +8,19 @@ Turn the files you already receive for Sunday into a ProPresenter playlist. Give
 
 ## Try it in a few minutes
 
+Start ProPresenter and enable **Settings → Network → Enable Network** before
+preparing a service. Run `python check_setup.py` first. It reads the configured
+Windows port and checks the local API, stopping immediately if Network is off
+or after at most eight seconds if the API does not respond. There are no retries
+or computer-use fallback. On another platform, or with a different endpoint,
+pass `--api-url http://127.0.0.1:PORT` (or set `PROPRESENTER_API_URL`).
+
+Normal `service_builder.py` staging performs the same check before reading
+service files. The later `--apply` step intentionally skips it because
+ProPresenter must be closed. Repository instructions in `AGENTS.md` authorize
+routine graceful restarts and the standard quit confirmation, and require a
+maximized window for visual review. Discarding unsaved work is not authorized.
+
 The practice files contain an original four-slide song. They are safe to use for a rehearsal and need no Bible license.
 
 1. Download this repository and open its folder in Codex. Start ProPresenter once on this computer so it creates its show folder.

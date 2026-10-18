@@ -13,6 +13,8 @@ import sys
 from datetime import datetime, timezone
 from uuid import uuid4
 
+from network_check import require_network
+
 sys.path.insert(0, str(Path(__file__).parent / "vendor"))
 from presentation_pb2 import Presentation
 from propresenter_pb2 import PlaylistDocument
@@ -398,7 +400,12 @@ def main() -> None:
     parser.add_argument("--show-root", type=Path, required=True)
     parser.add_argument("--stage", type=Path, required=True)
     parser.add_argument("--apply", action="store_true", help="Back up and apply, only when ProPresenter is closed")
+    parser.add_argument("--api-url", help="ProPresenter API URL for the initial staging preflight")
     args = parser.parse_args()
+    # Applying is deliberately offline: ProPresenter must already be closed.
+    # Normal staging must fail before reading source files if the API is down.
+    if not args.apply:
+        require_network(args.api_url)
     show = args.show_root.resolve()
     stage = args.stage.resolve()
     manifest = json.loads(args.manifest.read_text(encoding="utf-8"))

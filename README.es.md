@@ -8,6 +8,20 @@ Convierte los archivos que ya recibes para el domingo en una lista de reproducci
 
 ## Pruébalo en unos minutos
 
+Abre ProPresenter y activa **Settings → Network → Enable Network** antes de
+preparar el servicio. Ejecuta primero `python check_setup.py`. El programa lee
+el puerto configurado en Windows y comprueba la API local. Se detiene de
+inmediato si Network está desactivado, o después de un máximo de ocho segundos
+si la API no responde. No reintenta ni sustituye la API por control de pantalla.
+En otro sistema o para indicar otro puerto, usa
+`--api-url http://127.0.0.1:PUERTO` o la variable `PROPRESENTER_API_URL`.
+
+La preparación con `service_builder.py` hace la misma comprobación antes de
+leer los archivos. El paso posterior `--apply` la omite porque ProPresenter
+debe estar cerrado. `AGENTS.md` autoriza cerrar y reabrir la aplicación con su
+confirmación habitual, y pide maximizar la ventana para revisar. No autoriza
+descartar cambios sin guardar.
+
 Los archivos de práctica incluyen una canción original de cuatro diapositivas. No necesitas una licencia bíblica para esta prueba.
 
 1. Descarga este repositorio y abre su carpeta en Codex. Abre ProPresenter una vez en esta computadora para que cree su carpeta de datos.
