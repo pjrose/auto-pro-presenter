@@ -43,3 +43,19 @@ afterward.
 
 Maximize ProPresenter before inspecting or operating its interface, including
 after each restart. Verify slide dimensions separately from the window size.
+
+## Lyric theme and presentation size
+
+Use **Lyrics Centered > Top Third - White** for every song, including reused
+library songs. Preserve the theme's text stroke, background blur and text-line
+mask. Replace placeholder content while retaining its RTF styling; discard
+stale character ranges and apply the theme's capitalization consistently.
+Do not remove blur or masks to hide thumbnail artifacts. Check the composed
+audience preview with the Valley video playing to verify the actual result.
+
+Every song and sermon slide must be **1920x1080**, including blank Background
+cues and older cues in reused songs. ProPresenter can derive the presentation
+size from its first cue, so resizing only a new arrangement is insufficient.
+Scale element positions and bounds with the canvas. Keep song cue identifiers,
+arrangements and media actions intact. Review multi-text lyric layouts before
+automatically replacing their formatting. Stage and back up reused files too.

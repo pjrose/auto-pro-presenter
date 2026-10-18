@@ -65,7 +65,7 @@ The repository includes three portable themes in [`themes/`](themes/README.md):
 
 | Theme | Used for |
 | --- | --- |
-| **Lyrics Centered → Top Third - White** | New lyric slides. |
+| **Lyrics Centered → Top Third - White** | All song lyrics, including reused songs. |
 | **Black** | Sermon title and main points. |
 | **Plain Text → Central Bible Format** | Bible verses and references. This is the renamed plain Bible layout. |
 
@@ -102,4 +102,12 @@ py -m venv .venv
 
 Run from the repository folder so the example's relative PPTX path resolves. The first builder run **stages** files only. With ProPresenter closed, repeat the command with `--apply` to back up changed files and install them. The program refuses to apply while ProPresenter is running. [Manifest fields and examples](skill/propresenter-service-builder/references/manifest.md) are available for people who want to prepare one by hand.
 
-The workflow was tested with ProPresenter 18.4.1 on Windows. The generated files use [community Protocol Buffer bindings](https://github.com/greyshirtguy/ProPresenter7-Proto) under their included MIT license. ProPresenter does not publish this file format as a stable interface; verify the staged and installed result after app upgrades. The starter presentation and playlist in [`templates/`](templates/) contain no song lyrics. Existing songs are copied and patched only for explicit corrections; adding missing sections to an existing presentation needs a reviewed edit in ProPresenter or a deliberate rebuild.
+The workflow was tested with ProPresenter 18.4.1 on Windows. The generated files use [community Protocol Buffer bindings](https://github.com/greyshirtguy/ProPresenter7-Proto) under their included MIT license. ProPresenter does not publish this file format as a stable interface; verify the staged and installed result after app upgrades. The starter presentation and playlist in [`templates/`](templates/) contain no song lyrics. Existing songs keep their cue IDs, arrangements and media, receive the lyric theme and Full HD sizing, and receive text corrections only when explicitly requested; adding missing sections to an existing presentation needs a reviewed edit in ProPresenter or a deliberate rebuild.
+
+### Consistent lyrics and Full HD slides
+
+The builder applies **Lyrics Centered → Top Third - White** to new and reused songs, preserving the text stroke, background blur and text-line mask. It retains the theme’s RTF styling and applies its capitalization to the whole lyric instead of copying placeholder character ranges. Reused slides with multiple text elements stop for review rather than being overlaid.
+
+All generated song and sermon slides are **1920×1080**. Every older cue in a reused song is resized too, including the first Background cue, because that cue can determine ProPresenter’s presentation size. Element bounds scale with the canvas. Reused files are staged and backed up on installation. This does not change the configured audience screen resolution; check that separately and review the composed output with the Valley background playing.
+
+Regression checks: `python -m unittest discover -s tests -v` (requires local loopback access for the network tests).

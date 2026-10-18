@@ -20,6 +20,7 @@ from presentation_pb2 import Presentation
 from propresenter_pb2 import PlaylistDocument
 from template_pb2 import Template
 from pptx import Presentation as PowerPoint
+from striprtf.striprtf import rtf_to_text
 
 
 def uid() -> str:
@@ -70,15 +71,64 @@ def set_element_text(element, text: str, size: int, bold: bool = True) -> None:
 def set_template_text(element, text: str) -> None:
     """Replace placeholder text while retaining a theme element's RTF style."""
     data = element.element.text.rtf_data
-    prefix, marker, _ = data.rpartition(b"\\cb2 ")
-    if not marker or not data.endswith(b"}"):
+    # Use the FIRST run: later runs contain placeholder lyrics and their own
+    # paragraph formatting. Retain font/color tables and text stroke controls.
+    marker = re.search(rb"\\cb\d+ ", data)
+    if marker is None or not data.endswith(b"}"):
         raise ValueError(f"Unrecognized themed RTF in {element.element.name}")
-    element.element.text.rtf_data = prefix + marker + rtf_escape(text) + b"}"
+    attrs = element.element.text.attributes
+    capitalization = attrs.DESCRIPTOR.fields_by_name["capitalization"].enum_type
+    if capitalization.values_by_number[attrs.capitalization].name == "CAPITALIZATION_ALL_CAPS":
+        text = text.upper()
+    # Placeholder offsets no longer address this text. They otherwise cause
+    # only fragments of the new lyrics to inherit the theme's capitalization.
+    attrs.ClearField("custom_attributes")
+    element.element.text.rtf_data = data[:marker.end()] + rtf_escape(text) + b"}"
     element.element.text.scale_behavior = 2
+
+
+def normalize_slide_size(slide) -> None:
+    """Fit the entire canvas to Full HD, including an older first cue."""
+    width, height = slide.size.width, slide.size.height
+    if width <= 0 or height <= 0:
+        raise ValueError("Cannot resize a slide with missing or invalid dimensions")
+    sx, sy = 1920 / width, 1080 / height
+    for item in slide.elements:
+        bounds = item.element.bounds
+        bounds.origin.x *= sx
+        bounds.origin.y *= sy
+        bounds.size.width *= sx
+        bounds.size.height *= sy
+    slide.size.width, slide.size.height = 1920, 1080
+
+
+def format_song(doc: Presentation, lyric_template) -> None:
+    """Apply the lyric theme without replacing cue IDs, arrangements or media."""
+    template = copy.deepcopy(lyric_template)
+    normalize_slide_size(template)
+    themed = [e for e in template.elements if e.element.HasField("text")]
+    if len(themed) != 1:
+        raise ValueError("The selected lyric theme needs one text element")
+    for cue in doc.cues:
+        for action in cue.actions:
+            if not action.HasField("slide") or not action.slide.HasField("presentation"):
+                continue
+            slide = action.slide.presentation.base_slide
+            normalize_slide_size(slide)
+            elements = [e for e in slide.elements if e.element.HasField("text")]
+            if len(elements) > 1:
+                raise ValueError(f"Review multi-text lyric slide before theming: {doc.name}, cue {cue.uuid.string}")
+            for element in elements:
+                text = rtf_to_text(element.element.text.rtf_data.decode("utf-8"))
+                original_id = element.element.uuid.string
+                element.element.CopyFrom(themed[0].element)
+                element.element.uuid.string = original_id
+                set_template_text(element, text)
 
 
 def fresh_slide(template_slide):
     slide = copy.deepcopy(template_slide)
+    normalize_slide_size(slide)
     slide.uuid.string = uid()
     for element in slide.elements:
         element.element.uuid.string = uid()
@@ -121,7 +171,7 @@ def make_lyrics(song: dict, show: Path, prototype: Presentation,
     background_slide = fresh_slide(lyric_template)
     for element in background_slide.elements:
         if element.element.HasField("text"):
-            set_element_text(element, "", 75)
+            set_template_text(element, "")
     background = make_cue(source_cue, source_action, background_slide, "Background")
     doc.cues.add().CopyFrom(background)
     bg_group = doc.cue_groups.add()
@@ -157,7 +207,7 @@ def make_lyrics(song: dict, show: Path, prototype: Presentation,
             text_elements = [e for e in slide.elements if e.element.HasField("text")]
             if len(text_elements) != 1:
                 raise ValueError("The selected lyric theme needs one text element")
-            set_element_text(text_elements[0], lyric, 75)
+            set_template_text(text_elements[0], lyric)
             cue = make_cue(source_cue, source_action, slide)
             doc.cues.add().CopyFrom(cue)
             group.cue_identifiers.add().string = cue.uuid.string
@@ -460,6 +510,10 @@ def main() -> None:
             set_background_video(doc, media_action, dest_video, show,
                                  float(video["duration"]), float(video["frame_rate"]))
             staged[path.relative_to(show)] = doc.SerializeToString()
+        # Reused songs also need the selected theme and a consistent canvas.
+        # In particular, the first old cue can determine the presentation size.
+        format_song(doc, top_third)
+        staged[path.relative_to(show)] = doc.SerializeToString()
         song_entries.append((name, path, doc))
 
     sermon = None
